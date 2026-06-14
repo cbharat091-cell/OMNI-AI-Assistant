@@ -1,6 +1,6 @@
 {
   "name": "OMNI AI Assistant",
-  "description": "An advanced 'Omni General Intelligence' robotic assistant that acts as a loyal, highly capable, and analytical digital companion with custom domain alignments and secure memory extraction vaults.",
-  "requestFramePermissions": ["microphone"],
+  "description": "An advanced Omni General Intelligence robotic assistant that acts as a loyal, highly capable, and analytical digital companion with custom domain alignments and secure memory extraction vaults.",
+  "requestFramePermissions": ["camera"],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

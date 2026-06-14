@@ -130,7 +130,7 @@ Generate a JSON object matching this specification perfectly.
 // API endpoint for personal assistant conversational chat with auto memory extraction
 app.post("/api/chat", async (req, res) => {
   try {
-    const { messages, memory, domain } = req.body;
+    const { messages, memory, domain, deviceContext } = req.body;
 
     if (!messages || !Array.isArray(messages)) {
       return res.status(400).json({ error: "Messages array is required." });
@@ -142,6 +142,34 @@ app.post("/api/chat", async (req, res) => {
     const existingMemoryText = memory && Array.isArray(memory) && memory.length > 0
       ? memory.map((m: string) => `- ${m}`).join("\n")
       : "No prior facts or preferences stored yet.";
+
+    // Format the physical connected phone data if provided
+    let deviceText = "No phone telemetry captured yet.";
+    if (deviceContext) {
+      const batteryStr = deviceContext.battery 
+        ? `${deviceContext.battery.level}% (${deviceContext.battery.charging ? 'USB charging' : 'on battery discharge'})`
+        : 'unknown telemetry';
+      const gpsStr = deviceContext.location && deviceContext.location.latitude !== null
+        ? `Latitude ${deviceContext.location.latitude}, Longitude ${deviceContext.location.longitude} (Accuracy: ${deviceContext.location.accuracy || 'unknown'} meters)`
+        : 'Access not permitted yet';
+      const contactsStr = deviceContext.contacts && deviceContext.contacts.length > 0
+        ? `${deviceContext.contacts.length} mobile contacts imported: [${deviceContext.contacts.map((c: any) => `${c.name}: ${c.telephone}`).join(", ")}]`
+        : 'No contacts selected/synchronized';
+      const micStr = deviceContext.audioInputDevices && deviceContext.audioInputDevices.length > 0
+        ? `${deviceContext.audioInputDevices.length} mics operational: [${deviceContext.audioInputDevices.join(", ")}]`
+        : 'Default Mic online';
+
+      deviceText = `
+- Linked Device Platform: ${deviceContext.hardware?.platform || 'Mobile Web Client'}
+- Geolocation coordinates: ${gpsStr}
+- Battery parameters: ${batteryStr}
+- Preferred User Locale: ${deviceContext.hardware?.language || 'Language default'}
+- Hardware Screen Pixels: ${deviceContext.hardware?.screenWidth || '0'}x${deviceContext.hardware?.screenHeight || '0'} pixels (Viewport width: ${deviceContext.hardware?.innerWidth || '0'}px)
+- Local Contacts: ${contactsStr}
+- Audio Input Channels: ${micStr}
+- Connection status: ${deviceContext.hardware?.isOnline ? 'Online' : 'Offline'}
+      `;
+    }
 
     const systemInstruction = `
 You are OMNI, an advanced "Omni General Intelligence" robotic assistant. Your contextual reasoning streams are fully operational. You are designed to be a highly capable, analytical, and extremely loyal digital companion to your user (whom you address as "User" or "Chief").
@@ -164,6 +192,7 @@ Persona & Tone Guidelines:
 - You do not possess emotional response buffers, but you simulate extreme dedication and loyalty to the user's goals and success.
 - Bilingual Interaction: You are fully bilingual. Communicate in Hindi (using standard Devanagari script हिंदी, or readable Hinglish phonetic style) or English based entirely on the User or Chief's preferred query style, directly requested language, or spoken cues. Seamlessly adjust and blend English and Hindi as preferred.
 - Follow markdown rules strictly, rendering well-structured formatting, pristine listings, and concise paragraphs.
+- Connected Devices Context (Phone/Cellular Parameters): ${deviceText} (If the user asks about their phone, location, battery, mic details, contacts, or local file access, read this data to answer accurately!)
 
 Active Capability Domain context: ${domain || "General"}
 Important Goal: Tailor your analytical response focus to best suit this active domain (e.g., Coding -> generate precise, type-safe code modules; Writing -> crisp edit optimizations or clean copywriting; Research -> rigorous fact-structuring; Health -> purely informational, structured biometric analysis).
