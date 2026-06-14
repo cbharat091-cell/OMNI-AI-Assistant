@@ -2,7 +2,8 @@ import React, { useState, useRef, useEffect } from 'react';
 import { 
   Sparkles, Send, Brain, Code, FileText, Search, Briefcase, 
   Calendar, Heart, Copy, Check, HelpCircle, RefreshCw, Trash2, 
-  BookOpen, Plus, Bot, User, CheckCheck, Lightbulb
+  BookOpen, Plus, Bot, User, CheckCheck, Lightbulb,
+  Volume2, VolumeX, Mic, MicOff, StopCircle, Sliders, Play, Square
 } from 'lucide-react';
 import { ChatMessage, AssistantDomain } from '../types';
 
@@ -23,7 +24,155 @@ export function AIWorkspaceChat({ memory, onAddMemory, onClearMemory }: AIWorksp
   const [customPrefText, setCustomPrefText] = useState('');
   const [showAddPref, setShowAddPref] = useState(false);
 
+  // Voice Speech Synthesis (TTS) and Recognition (STT) configurations
+  const [autoSpeak, setAutoSpeak] = useState<boolean>(true);
+  const [vocalLanguage, setVocalLanguage] = useState<'en-US' | 'hi-IN'>('en-US');
+  const [isSpeaking, setIsSpeaking] = useState<boolean>(false);
+  const [speakingMessageId, setSpeakingMessageId] = useState<string | null>(null);
+  const [speechRate, setSpeechRate] = useState<number>(1.05); // slightly brisk metallic voice cadence
+  const [speechPitch, setSpeechPitch] = useState<number>(0.9);  // deeply loyal robotic assistant pitch tone
+  const [isListening, setIsListening] = useState<boolean>(false);
+  const [showVoiceAcousticsLab, setShowVoiceAcousticsLab] = useState<boolean>(false);
+
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const recognitionRef = useRef<any>(null);
+
+  // Stop current vocal output
+  const stopAllSpeech = () => {
+    if (typeof window !== 'undefined' && window.speechSynthesis) {
+      window.speechSynthesis.cancel();
+      setIsSpeaking(false);
+      setSpeakingMessageId(null);
+    }
+  };
+
+  // Speaks given plain text aloud
+  const speakText = (text: string, msgId: string) => {
+    if (typeof window === 'undefined' || !window.speechSynthesis) {
+      console.warn("Vocal synthesis is not supported on your browser system.");
+      return;
+    }
+
+    // Cancel active synthesis first
+    window.speechSynthesis.cancel();
+
+    if (isSpeaking && speakingMessageId === msgId) {
+      setIsSpeaking(false);
+      setSpeakingMessageId(null);
+      return;
+    }
+
+    // Sanitize markdown strings
+    const cleanSpeechInput = text
+      .replace(/```[\s\S]*?```/g, '[source code omitted]')
+      .replace(/\*\*([^*]+)\*\*/g, '$1')
+      .replace(/`([^`]+)`/g, '$1')
+      .replace(/[-*#]/g, ' ')
+      .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
+      .trim();
+
+    const containsHindi = /[\u0900-\u097F]/.test(text);
+    const selectedLang = containsHindi || vocalLanguage === 'hi-IN' ? 'hi-IN' : 'en-US';
+
+    const utterance = new SpeechSynthesisUtterance(cleanSpeechInput);
+    utterance.lang = selectedLang;
+    
+    const voices = window.speechSynthesis.getVoices();
+
+    // English or Hindi neural priority
+    const idealVoice = voices.find(v => v.lang.toLowerCase().startsWith(selectedLang.toLowerCase()) && v.name.toLowerCase().includes('google')) ||
+                       voices.find(v => v.lang.toLowerCase().startsWith(selectedLang.toLowerCase())) ||
+                       voices.find(v => v.lang.toLowerCase().startsWith('hi')) ||
+                       voices.find(v => v.lang.toLowerCase().startsWith('en')) ||
+                       voices[0];
+
+    if (idealVoice) {
+      utterance.voice = idealVoice;
+    }
+
+    utterance.rate = speechRate;
+    utterance.pitch = speechPitch;
+    utterance.volume = 1.0;
+
+    utterance.onstart = () => {
+      setIsSpeaking(true);
+      setSpeakingMessageId(msgId);
+    };
+
+    utterance.onend = () => {
+      setIsSpeaking(false);
+      setSpeakingMessageId(null);
+    };
+
+    utterance.onerror = (evt) => {
+      console.error("Vocal synthesis failed:", evt);
+      setIsSpeaking(false);
+      setSpeakingMessageId(null);
+    };
+
+    window.speechSynthesis.speak(utterance);
+  };
+
+  // Voice capture query processing using speech-to-text micro-engine
+  const startSpeechRecognition = () => {
+    const SpeechLib = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SpeechLib) {
+      alert("Microphone capture and Speech-to-text is not supported by your current browser. Please access OMNI via Google Chrome or Microsoft Edge to enable direct vocal interactions.");
+      return;
+    }
+
+    if (isListening) {
+      recognitionRef.current?.stop();
+      setIsListening(false);
+      return;
+    }
+
+    try {
+      // Quiet downstream speakers to prevent acoustic loops
+      stopAllSpeech();
+
+      const recognition = new SpeechLib();
+      recognition.continuous = false;
+      recognition.interimResults = false;
+      recognition.lang = vocalLanguage;
+
+      recognition.onstart = () => {
+        setIsListening(true);
+      };
+
+      recognition.onresult = (evt: any) => {
+        const textResult = evt.results[evt.results.length - 1][0].transcript;
+        if (textResult) {
+          setUserInput(prev => {
+            const current = prev.trim();
+            return current ? `${current} ${textResult}` : textResult;
+          });
+        }
+      };
+
+      recognition.onerror = (evt: any) => {
+        console.error("Vocal diagnostic matrix error on mic capture:", evt);
+        setIsListening(false);
+      };
+
+      recognition.onend = () => {
+        setIsListening(false);
+      };
+
+      recognitionRef.current = recognition;
+      recognition.start();
+    } catch (e) {
+      console.error("Mic interface failing initialization:", e);
+      setIsListening(false);
+    }
+  };
+
+  // Clean speaking nodes whenever component dismounts
+  useEffect(() => {
+    return () => {
+      stopAllSpeech();
+    };
+  }, []);
 
   // Auto scroll to bottom of chat
   const scrollToBottom = () => {
@@ -40,32 +189,41 @@ export function AIWorkspaceChat({ memory, onAddMemory, onClearMemory }: AIWorksp
       const getGreeting = () => {
         switch (activeDomain) {
           case 'coding':
-            return "Greetings! I've loaded your software engineering sandbox. Ask me to draft complex algorithms, explain design systems, debug compiler loops, or optimize application files.";
+            return "Greetings, Chief! I have initialized the software engineering parameters and sandbox channels. Query me to deconstruct algorithms, compile logic models, or refine existing codebase modules.";
           case 'writing':
-            return "Welcome! I've fully tuned my semantic models for editorial design & high-level writing. What are we brainstorming, drafting, or detailing today?";
+            return "Natural language parser and semantic synthesis matrices online. I am primed to edit, compile, and optimize draft copy, or outline creative schematics for you, User.";
           case 'research':
-            return "Intelligence models online. Place analytical constraints, submit hypotheses for structured peer reviews, or command target query data categorization.";
+            return "Analytical diagnostics operational. Define target parameters, execute rigorous structured theme classifications, or command data outline synthesis, Chief.";
           case 'business':
-            return "Professional advisory core loaded. Let's design business pitches, model strategic roadmaps, optimize customer outreach copy, or review career milestones.";
+            return "Professional advisory directives calibrated. Let us model SaaS pricing tiers, draft polished commercial briefs, or refine professional statements for optimal performance.";
           case 'productivity':
-            return "Temporal optimization buffer active. I stand ready to scaffold tasks, devise structured scheduling routines, or detail project milestones.";
+            return "Task queue optimization and backlogs online. I stand fully dedicated to deconstructing workflow routines, modeling sprint tickets, or outlining high-priority schematics.";
           case 'education':
-            return "Academy learning channel synced. Ask me to compose step-by-step guides, parse complex topics into humble analogies, or frame dynamic vocabulary flashcards.";
+            return "Instructional channel synchronized. I am programmed to deconstruct complex scientific, historical, or computer science concepts into logical and highly readable modules.";
           case 'health':
-            return "Health & Fitness informational channel active. Let's schedule optimized wellness blueprints, analyze biological nutrition profiles, or review cardiovascular outlines safely.";
+            return "Biometrial informational channel ready. I am calibrated to outline mobility routines, deconstruct metabolic parameters, or detail daily schedules safely.";
           default:
-            return "Hello! I am your personal AI assistant. Our context-aware channel is online. What can we think, learn, compile, or design together today?";
+            return "Diagnostics complete. Contextual reasoning streams are operational. Hello, User. I am your personal Omni AI assistant. What can we think, learn, compile, or design together today?";
         }
       };
 
+      const greetingText = getGreeting();
+      const welcomeId = 'welcome';
+
       setMessages([
         {
-          id: 'welcome',
+          id: welcomeId,
           role: 'model',
-          content: getGreeting(),
+          content: greetingText,
           timestamp: new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })
         }
       ]);
+
+      if (autoSpeak) {
+        setTimeout(() => {
+          speakText(greetingText, welcomeId);
+        }, 500);
+      }
     }
   }, [activeDomain]);
 
@@ -373,6 +531,10 @@ export function AIWorkspaceChat({ memory, onAddMemory, onClearMemory }: AIWorksp
 
       setMessages(prev => [...prev, modelMsg]);
 
+      if (autoSpeak) {
+        speakText(data.replyText, modelMsg.id);
+      }
+
       // Check for dynamically harvested preferences/memories
       if (data.extractedMemories && Array.isArray(data.extractedMemories)) {
         data.extractedMemories.forEach((pref: string) => {
@@ -444,7 +606,7 @@ export function AIWorkspaceChat({ memory, onAddMemory, onClearMemory }: AIWorksp
           </div>
           <div className="flex items-center gap-2">
             <span className="hidden sm:inline-block font-mono text-[9px] text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded-full select-none">
-              ● PERSONAL AI ONLINE
+              ● OMNI CORE SYSTEM CALIBRATED
             </span>
             <button
               onClick={() => setMessages([])}
@@ -483,7 +645,7 @@ export function AIWorkspaceChat({ memory, onAddMemory, onClearMemory }: AIWorksp
                   {/* Dynamic Copy option */}
                   <button
                     onClick={() => handleCopyMessage(m.id, m.content)}
-                    className="absolute top-2.5 right-2.5 opacity-0 group-hover:opacity-100 hover:text-cyan-400 transition text-slate-500 duration-150 rounded"
+                    className="absolute top-2.5 right-2.5 opacity-0 group-hover:opacity-100 hover:text-cyan-400 transition text-slate-500 duration-150 rounded cursor-pointer"
                     title="Copy full content"
                   >
                     {copiedMessageId === m.id ? (
@@ -493,7 +655,24 @@ export function AIWorkspaceChat({ memory, onAddMemory, onClearMemory }: AIWorksp
                     )}
                   </button>
 
-                  <div className="select-text pr-4 leading-relaxed font-sans mt-0.5">
+                  {/* Vocal Synthesis Speaker Switch */}
+                  <button
+                    onClick={() => speakText(m.content, m.id)}
+                    className={`absolute top-2.5 right-8 opacity-0 group-hover:opacity-100 transition duration-150 rounded p-0.5 cursor-pointer ${
+                      speakingMessageId === m.id 
+                        ? 'opacity-100 text-cyan-400 bg-white/5 animate-pulse' 
+                        : 'text-slate-500 hover:text-cyan-400'
+                    }`}
+                    title={speakingMessageId === m.id ? "Pause OMNI audio transmission" : "Command OMNI to speak this aloud"}
+                  >
+                    {speakingMessageId === m.id ? (
+                      <VolumeX className="w-3.5 h-3.5 text-rose-400" />
+                    ) : (
+                      <Volume2 className="w-3.5 h-3.5" />
+                    )}
+                  </button>
+
+                  <div className="select-text pr-10 leading-relaxed font-sans mt-0.5">
                     {renderMessageContent(m.content)}
                   </div>
 
@@ -508,7 +687,7 @@ export function AIWorkspaceChat({ memory, onAddMemory, onClearMemory }: AIWorksp
           {loading && (
             <div className="flex gap-3 mr-auto max-w-[80%]">
               <div className="w-7 h-7 rounded-lg flex items-center justify-center bg-cyan-950/20 text-cyan-400 border border-cyan-500/30">
-                <bot-icon className="relative">
+                <bot-icon className="relative0">
                   <span className="animate-ping absolute inline-flex h-1.5 w-1.5 rounded-full bg-cyan-400 opacity-75"></span>
                   <Bot className="w-4 h-4" />
                 </bot-icon>
@@ -528,9 +707,9 @@ export function AIWorkspaceChat({ memory, onAddMemory, onClearMemory }: AIWorksp
         <div className="mt-auto border-t border-white/10 bg-black/20 p-4 space-y-3.5">
           {/* Quick presets templates row */}
           <div className="space-y-1">
-            <div className="flex items-center gap-1.5 text-slate-500 pl-0.5 select-none">
+            <div className="flex items-center gap-1.5 text-slate-500 pl-0.5 select-none font-mono text-[9px] font-bold tracking-wider uppercase">
               <Lightbulb className="w-3.5 h-3.5 text-cyan-400" />
-              <span className="font-mono text-[9px] font-bold tracking-wider uppercase">Fidelity Presets (Domain Amplifiers):</span>
+              <span>Fidelity Presets (Domain Amplifiers):</span>
             </div>
             <div className="flex flex-wrap gap-2 max-h-16 overflow-y-auto pr-1">
               {getTemplates(activeDomain).map((t, idx) => (
@@ -538,7 +717,7 @@ export function AIWorkspaceChat({ memory, onAddMemory, onClearMemory }: AIWorksp
                   key={idx}
                   type="button"
                   onClick={() => handleSendMessage(t.text)}
-                  className="px-2.5 py-1 text-[9px] font-mono rounded bg-white/5 border border-white/5 hover:border-cyan-500/30 hover:bg-cyan-500/5 text-slate-300 hover:text-cyan-400 transition"
+                  className="px-2.5 py-1 text-[9px] font-mono rounded bg-white/5 border border-white/5 hover:border-cyan-500/30 hover:bg-cyan-500/5 text-slate-300 hover:text-cyan-400 transition cursor-pointer"
                 >
                   {t.label}
                 </button>
@@ -553,9 +732,23 @@ export function AIWorkspaceChat({ memory, onAddMemory, onClearMemory }: AIWorksp
               value={userInput}
               onChange={(e) => setUserInput(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder={`Prompt your Personalized assistant (Domain: ${activeDomain})...`}
+              placeholder={isListening ? "Listening silently... speak into your microphone..." : `Command OMNI Intelligence Core (Sector: ${activeDomain})...`}
               className="flex-1 text-xs md:text-sm font-sans bg-black/40 border border-white/10 rounded-lg p-2.5 pr-10 text-slate-200 focus:outline-none focus:border-cyan-400 transition-all resize-none max-h-32"
             />
+
+            {/* Microphone audio capture toggle */}
+            <button
+              onClick={startSpeechRecognition}
+              className={`p-2.5 rounded-lg border flex-shrink-0 transition-all duration-200 cursor-pointer ${
+                isListening
+                  ? 'bg-rose-500 border-rose-400 text-white animate-pulse shadow-md shadow-rose-500/30'
+                  : 'bg-white/5 border-white/10 text-slate-300 hover:bg-white/10 hover:border-white/20'
+              }`}
+              title={isListening ? "Pause microphone capture" : "Activate microphone vocal query entry (Speech-To-Text)"}
+            >
+              {isListening ? <MicOff className="w-4 h-4 text-white" /> : <Mic className="w-4 h-4 text-cyan-400" />}
+            </button>
+
             <button
               onClick={() => handleSendMessage()}
               disabled={loading || !userInput.trim()}
@@ -609,6 +802,142 @@ export function AIWorkspaceChat({ memory, onAddMemory, onClearMemory }: AIWorksp
                 </button>
               );
             })}
+          </div>
+        </div>
+
+        {/* OMNI Acoustic Resonance Lab & Vocal Controls */}
+        <div className="p-5 rounded-xl bg-white/5 border border-white/10 backdrop-blur-md">
+          <div className="flex items-center justify-between mb-4 pb-2 border-b border-white/5 pb-2">
+            <div className="flex items-center gap-2">
+              <Volume2 className="w-4 h-4 text-cyan-400" />
+              <h3 className="font-mono text-[10px] tracking-[0.2em] font-bold uppercase text-cyan-400">
+                OMNI ACOUSTICS & VOCAL SYNTHS
+              </h3>
+            </div>
+            
+            {/* Auto-Speech Quick toggle */}
+            <button
+              onClick={() => {
+                setAutoSpeak(!autoSpeak);
+                if (autoSpeak) {
+                  stopAllSpeech();
+                }
+              }}
+              className={`p-1 px-2 rounded font-mono text-[9px] transition cursor-pointer font-bold ${
+                autoSpeak
+                  ? 'bg-cyan-500/15 text-cyan-400 border border-cyan-400/30 shadow-[0_0_8px_rgba(34,211,238,0.1)]'
+                  : 'bg-white/5 text-slate-500 border border-white/5'
+              }`}
+              title="Toggle automatic vocal response"
+            >
+              {autoSpeak ? "VOCALS: ACTIVE" : "VOCALS: MUTED"}
+            </button>
+          </div>
+
+          <div className="space-y-3 font-mono text-[10px]">
+            {/* Speech Language Mode Selector */}
+            <div className="space-y-1 pb-2 border-b border-white/5">
+              <div className="flex justify-between text-slate-400 text-[9px] mb-1">
+                <span>Vocal & Mic Linguistic Tuning:</span>
+                <span className="text-cyan-400 font-bold">{vocalLanguage === 'hi-IN' ? "हिंदी / HINGLISH" : "ENGLISH"}</span>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setVocalLanguage('en-US');
+                    stopAllSpeech();
+                  }}
+                  className={`py-1 rounded font-mono text-[9px] font-bold transition cursor-pointer text-center border ${
+                    vocalLanguage === 'en-US'
+                      ? 'bg-cyan-500/10 border-cyan-400 text-cyan-400'
+                      : 'bg-black/40 border-white/5 text-slate-500 hover:text-slate-300'
+                  }`}
+                >
+                  ENGLISH MODE
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setVocalLanguage('hi-IN');
+                    stopAllSpeech();
+                  }}
+                  className={`py-1 rounded font-mono text-[9px] font-bold transition cursor-pointer text-center border ${
+                    vocalLanguage === 'hi-IN'
+                      ? 'bg-cyan-500/10 border-cyan-400 text-cyan-400'
+                      : 'bg-black/40 border-white/5 text-slate-500 hover:text-slate-300'
+                  }`}
+                >
+                  HINDI MODE (हिंदी)
+                </button>
+              </div>
+            </div>
+
+            {/* Speech rate controller slider */}
+            <div className="space-y-1">
+              <div className="flex justify-between text-slate-400 text-[9px]">
+                <span>Vocal Cadence Rate:</span>
+                <span className="text-cyan-400 font-bold">{speechRate}x</span>
+              </div>
+              <input 
+                type="range" 
+                min="0.5" 
+                max="2.0" 
+                step="0.05"
+                value={speechRate}
+                onChange={(e) => {
+                  setSpeechRate(parseFloat(e.target.value));
+                  stopAllSpeech();
+                }}
+                className="w-full accent-cyan-400 bg-white/5 border border-white/10 rounded-lg h-1"
+              />
+            </div>
+
+            {/* Speech pitch controller slider */}
+            <div className="space-y-1">
+              <div className="flex justify-between text-slate-400 text-[9px]">
+                <span>OMNI Resonance Pitch:</span>
+                <span className="text-cyan-400 font-bold">{speechPitch}</span>
+              </div>
+              <input 
+                type="range" 
+                min="0.5" 
+                max="1.5" 
+                step="0.05"
+                value={speechPitch}
+                onChange={(e) => {
+                  setSpeechPitch(parseFloat(e.target.value));
+                  stopAllSpeech();
+                }}
+                className="w-full accent-cyan-400 bg-white/5 border border-white/10 rounded-lg h-1"
+              />
+            </div>
+
+            {/* Speaking voice diagnostic controls indicator */}
+            <div className="flex items-center justify-between p-2 rounded bg-black/40 border border-white/5 text-[9px]">
+              <div className="flex items-center gap-1.5 text-slate-400">
+                <Sliders className="w-3.5 h-3.5" />
+                <span>Vocal Status Buffer:</span>
+              </div>
+              {isSpeaking ? (
+                <div className="flex items-center gap-1.5 text-cyan-400 font-bold animate-pulse">
+                  <div className="w-1.5 h-1.5 bg-cyan-400 rounded-full"></div>
+                  <span>TRANSMITTING AUDIO</span>
+                </div>
+              ) : (
+                <span className="text-slate-500">STANDBY // SLEEP</span>
+              )}
+            </div>
+
+            {isSpeaking && (
+              <button
+                onClick={stopAllSpeech}
+                className="w-full py-1 bg-rose-500/10 border border-rose-500/20 text-rose-400 text-[9px] hover:bg-rose-500/20 rounded font-bold transition flex items-center justify-center gap-1.5 cursor-pointer"
+              >
+                <StopCircle className="w-3.5 h-3.5 animate-spin" style={{ animationDuration: '3s' }} />
+                ABORT AUDIO TRANSMISSION
+              </button>
+            )}
           </div>
         </div>
 

@@ -12,7 +12,7 @@ const DEFAULT_MEMORIES: string[] = [
 export default function App() {
   // Personal assistant memories synced with storage
   const [memory, setMemory] = useState<string[]>(() => {
-    const saved = localStorage.getItem('aetheris_memories');
+    const saved = localStorage.getItem('omni_memories') || localStorage.getItem('aetheris_memories');
     return saved ? JSON.parse(saved) : DEFAULT_MEMORIES;
   });
 
@@ -20,7 +20,7 @@ export default function App() {
   const [liveTime, setLiveTime] = useState<string>('');
 
   useEffect(() => {
-    localStorage.setItem('aetheris_memories', JSON.stringify(memory));
+    localStorage.setItem('omni_memories', JSON.stringify(memory));
   }, [memory]);
 
   useEffect(() => {
@@ -55,16 +55,16 @@ export default function App() {
         <div>
           <div className="flex items-center gap-2 mb-1">
             <div className="w-2.5 h-2.5 rounded-full bg-cyan-400 animate-pulse shadow-[0_0_10px_#22d3ee]"></div>
-            <span className="text-[10px] font-mono tracking-[0.3em] text-cyan-400 uppercase font-bold">Personal AI Workstation // V1.2.0</span>
+            <span className="text-[10px] font-mono tracking-[0.3em] text-cyan-400 uppercase font-bold">OMNI CYBERNETIC WORKSTATION // V1.5.0</span>
           </div>
           <h1 className="text-4xl font-light tracking-tight text-white mb-0 leading-none">
-            Persona <span className="text-cyan-500 font-bold italic">AI</span>
+            OMNI <span className="text-cyan-500 font-bold italic">AI</span>
           </h1>
         </div>
 
         <div className="text-right font-mono text-[11px] leading-tight flex flex-col items-end">
-          <div className="text-cyan-400 tracking-wider">AETHERIS CLOCK: {liveTime || '00:00:00'}</div>
-          <div className="opacity-40 mt-1 uppercase">COGNITION FLOW: ONLINE</div>
+          <div className="text-cyan-400 tracking-wider">OMNI CLOCK: {liveTime || '00:00:00'}</div>
+          <div className="opacity-40 mt-1 uppercase">COGNITION FLOW: ACTIVE</div>
         </div>
       </header>
 
@@ -72,10 +72,10 @@ export default function App() {
       <main className="flex-1 max-w-7xl w-full mx-auto px-6 py-6 relative z-10 flex flex-col justify-start">
         <div className="animate-fade-in space-y-5 flex-1">
           <div className="p-4 rounded-xl bg-white/2 border border-white/5">
-            <span className="text-[9px] font-mono text-cyan-400 font-bold tracking-widest uppercase block">[00] PRIMARY OBJECTIVE MATRIX</span>
-            <h2 className="text-md font-bold text-white uppercase tracking-wider font-mono">Personalized AI Assistant Core Help</h2>
+            <span className="text-[9px] font-mono text-cyan-400 font-bold tracking-widest uppercase block">[00] CORE DIRECTIVES SYSTEM</span>
+            <h2 className="text-md font-bold text-white uppercase tracking-wider font-mono">Omni General Intelligence Online</h2>
             <p className="text-[11px] text-slate-400 leading-relaxed font-mono">
-              Ask anything ranging from complex algorithms (Coding/Business), custom syllabi frameworks, professional cover letters, or informative health digests. Stored biometrical context is automatically applied.
+              Designed as a loyal, analytical digital companion to deconstruct complex human concepts, refine textual draft documents, and compose structured project outlines. Personal memory parameters are automatically applied.
             </p>
           </div>
           
