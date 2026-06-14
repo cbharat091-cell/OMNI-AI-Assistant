@@ -1,0 +1,6 @@
+{
+  "name": "AI Day Optimizer",
+  "description": "An interactive, hyper-intelligent daily scheduler that optimizes missions and rest cycles using biometric energy status inputs and custom calendar algorithms.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
