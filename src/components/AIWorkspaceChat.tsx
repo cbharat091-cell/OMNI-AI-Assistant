@@ -36,6 +36,7 @@ export function AIWorkspaceChat({ memory, onAddMemory, onClearMemory }: AIWorksp
   // Floating transcript for live subtitles below robot face
   const [youTranscript, setYouTranscript] = useState<string>('');
   const [omniResponseWords, setOmniResponseWords] = useState<string>('');
+  const [isSimulatedMode, setIsSimulatedMode] = useState<boolean>(false);
 
   // Diagnostic drawer overlay ("access everything .all data")
   const [showDiagnostics, setShowDiagnostics] = useState<boolean>(false);
@@ -58,6 +59,25 @@ export function AIWorkspaceChat({ memory, onAddMemory, onClearMemory }: AIWorksp
   const [cameraError, setCameraError] = useState<string | null>(null);
   const [isCameraActive, setIsCameraActive] = useState<boolean>(false);
   const [cameraFilter, setCameraFilter] = useState<'raw' | 'green' | 'blue' | 'thermal'>('green');
+  const [micTroubleshootTab, setMicTroubleshootTab] = useState<'newtab' | 'safari' | 'chrome'>(() => {
+    try {
+      const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !(window as any).MSStream;
+      const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
+      if (isIOS || isSafari) return 'safari';
+    } catch (e) {}
+    return 'newtab';
+  });
+  const [copiedLink, setCopiedLink] = useState<boolean>(false);
+  const copyAppLink = () => {
+    try {
+      const targetUrl = window.location.href.includes("run.app") ? window.location.href : "https://ais-dev-hntgivjlrvemz25e7y5m4j-195254227271.asia-southeast1.run.app";
+      navigator.clipboard.writeText(targetUrl);
+      setCopiedLink(true);
+      setTimeout(() => setCopiedLink(false), 2000);
+    } catch (e) {
+      console.error(e);
+    }
+  };
   const videoRef = useRef<HTMLVideoElement | null>(null);
 
   const startCamera = async () => {
@@ -373,8 +393,8 @@ export function AIWorkspaceChat({ memory, onAddMemory, onClearMemory }: AIWorksp
         setIsListening(false);
         const errorType = evt.error || '';
         let userAdvice = "A voice connection error occurred.";
-        if (errorType === 'not-allowed') {
-          userAdvice = "⚠️ MIC CAPTURE BLOCKED: The security sandbox or device settings did not grant mic access. Please type your command in the direct keyboard input box on the main cockpit screen below!";
+        if (errorType === 'not-allowed' || errorType === 'service-not-allowed') {
+          userAdvice = `⚠️ MIC CAPTURE BLOCKED: The security sandbox or device settings did not grant mic access (${errorType}). Please type your command in the direct keyboard input box on the main cockpit screen below!`;
         } else if (errorType === 'audio-capture') {
           userAdvice = "⚠️ HARDWARE NO MIC: No physical microphones were discovered on this console. Please converse with OMNI via typing input below.";
         } else if (errorType === 'no-speech') {
@@ -472,6 +492,7 @@ export function AIWorkspaceChat({ memory, onAddMemory, onClearMemory }: AIWorksp
     setMessages([]);
     setYouTranscript('');
     setOmniResponseWords('');
+    setIsSimulatedMode(false);
   };
 
   // Submit actual conversational input
@@ -481,6 +502,7 @@ export function AIWorkspaceChat({ memory, onAddMemory, onClearMemory }: AIWorksp
     setUserInput('');
     setYouTranscript(queryText);
     setOmniResponseWords('');
+    setIsSimulatedMode(false);
 
     const userMsg: ChatMessage = {
       id: `msg-${Date.now()}-user`,
@@ -527,6 +549,7 @@ export function AIWorkspaceChat({ memory, onAddMemory, onClearMemory }: AIWorksp
 
       setMessages(prev => [...prev, modelMsg]);
       setOmniResponseWords(data.replyText);
+      setIsSimulatedMode(!!data.isSimulated);
 
       if (autoSpeak) {
         speakText(data.replyText, modelMsg.id);
@@ -550,6 +573,7 @@ export function AIWorkspaceChat({ memory, onAddMemory, onClearMemory }: AIWorksp
       };
       setMessages(prev => [...prev, errorMsg]);
       setOmniResponseWords(errorContent);
+      setIsSimulatedMode(errorContent.includes("DAILY QUOTA EXCEEDED") || errorContent.includes("CONFIGURATION BOUNDARY"));
     } finally {
       setLoading(false);
     }
@@ -1058,6 +1082,229 @@ export function AIWorkspaceChat({ memory, onAddMemory, onClearMemory }: AIWorksp
         )}
       </div>
 
+      {/* MIC CAPTURE BLOCKED AUTOMATIC HELPER COCKPIT MOD/HUD */}
+      {youTranscript.includes("MIC CAPTURE BLOCKED") && (
+        <div className="w-full max-w-xl z-20 mt-3 bg-slate-950/90 border border-yellow-500/40 rounded-xl p-4 shadow-[0_0_20px_rgba(234,179,8,0.15)] backdrop-blur-md text-left transition-all duration-300">
+          <div className="flex items-center gap-2 text-yellow-500 font-mono text-xs font-bold uppercase tracking-wider mb-2">
+            <AlertCircle className="w-4 h-4 text-yellow-500 shrink-0" />
+            <span>Interactive Guide: How to Unblock Microphone</span>
+          </div>
+          <p className="text-slate-400 font-sans text-[11px] leading-relaxed mb-3">
+            Mobile operating systems and browser sandboxes require user authorization. Follow these short steps to restore voice interactions:
+          </p>
+
+          {/* Navigation Tab Pills */}
+          <div className="flex gap-1.5 border-b border-white/10 pb-2 mb-3">
+            <button
+              type="button"
+              onClick={() => setMicTroubleshootTab('newtab')}
+              className={`px-2.5 py-1 text-[10px] font-mono font-bold uppercase rounded-[4px] transition-all cursor-pointer ${
+                micTroubleshootTab === 'newtab'
+                  ? 'bg-cyan-500/15 text-cyan-400 border border-cyan-500/30'
+                  : 'bg-black/30 border border-transparent text-slate-500 hover:text-slate-300'
+              }`}
+            >
+              🔑 1. New Tab (Easiest)
+            </button>
+            <button
+              type="button"
+              onClick={() => setMicTroubleshootTab('safari')}
+              className={`px-2.5 py-1 text-[10px] font-mono font-bold uppercase rounded-[4px] transition-all cursor-pointer ${
+                micTroubleshootTab === 'safari'
+                  ? 'bg-cyan-500/15 text-cyan-400 border border-cyan-500/30'
+                  : 'bg-black/30 border border-transparent text-slate-500 hover:text-slate-300'
+              }`}
+            >
+              📱 Safari (iPhone)
+            </button>
+            <button
+              type="button"
+              onClick={() => setMicTroubleshootTab('chrome')}
+              className={`px-2.5 py-1 text-[10px] font-mono font-bold uppercase rounded-[4px] transition-all cursor-pointer ${
+                micTroubleshootTab === 'chrome'
+                  ? 'bg-cyan-500/15 text-cyan-400 border border-cyan-500/30'
+                  : 'bg-black/30 border border-transparent text-slate-500 hover:text-slate-300'
+              }`}
+            >
+              🤖 Chrome (Android)
+            </button>
+          </div>
+
+          {/* Tab Contents */}
+          <div className="font-sans text-[11.5px] text-slate-300 leading-relaxed bg-black/40 p-3 rounded-lg border border-white/5">
+            {micTroubleshootTab === 'newtab' && (
+              <div className="space-y-2">
+                <div className="flex gap-2">
+                  <span className="shrink-0 text-cyan-400 font-bold font-mono text-[10px]">STEP 1:</span>
+                  <span>Inside sandboxed frame previews (like the AI Studio chat frame), browsers block mic access for privacy. You must run the app in its own independent tab.</span>
+                </div>
+                <div className="flex gap-2">
+                  <span className="shrink-0 text-cyan-400 font-bold font-mono text-[10px]">STEP 2:</span>
+                  <span>Tap the <span className="text-white font-semibold">Share icon ↗</span> or the <span className="text-white font-semibold">"Open in a new tab"</span> button at the very top of your AI Studio interface to load OMNI directly as a primary web application.</span>
+                </div>
+                <div className="pt-2 flex justify-end">
+                  <a
+                    href={window.location.href}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="px-3 py-1.5 bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-400 hover:text-white border border-cyan-400/40 rounded font-mono text-[9px] font-bold transition flex items-center gap-1 cursor-pointer select-none"
+                  >
+                    <span>LAUNCH DIRECT TAB ↗</span>
+                  </a>
+                </div>
+              </div>
+            )}
+
+            {micTroubleshootTab === 'safari' && (
+              <div className="space-y-3.5">
+                <div className="p-2.5 bg-yellow-500/10 border border-yellow-500/30 rounded-lg text-yellow-300 font-mono text-[10.5px] leading-relaxed select-text">
+                  ⚡ <strong className="text-white">APPLE IFRAME DIRECTIVE:</strong> iOS Safari natively blocks microphone access inside embedded developer frames. To enable your phone's microphone, you must click <strong className="text-white">"Share"</strong> or open the app directly in a native browser tab.
+                </div>
+                
+                <div className="space-y-2 border-t border-white/5 pt-2">
+                  <div className="flex gap-2">
+                    <span className="shrink-0 text-yellow-400 font-bold font-mono text-[11px] bg-yellow-400/10 px-1.5 rounded h-5 flex items-center justify-center">1</span>
+                    <span>Copy the App URL below and open it directly inside your native Safari or Chrome app on your iPhone:</span>
+                  </div>
+                  
+                  <div className="flex items-center gap-1.5 bg-slate-900/90 border border-white/10 rounded-lg p-1.5 pl-3">
+                    <span className="font-mono text-[9px] text-cyan-400 select-all truncate flex-1 leading-none py-1">
+                      {window.location.href.includes("run.app") ? window.location.href : "https://ais-dev-hntgivjlrvemz25e7y5m4j-195254227271.asia-southeast1.run.app"}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={copyAppLink}
+                      className={`px-3 py-1.5 rounded font-mono text-[9px] font-extrabold transition-all duration-300 cursor-pointer ${
+                        copiedLink 
+                          ? 'bg-emerald-500 text-slate-950 scale-95' 
+                          : 'bg-cyan-500/20 text-cyan-300 border border-cyan-400/30 hover:bg-cyan-500/30'
+                      }`}
+                    >
+                      {copiedLink ? "✓ COPIED" : "COPY URL"}
+                    </button>
+                  </div>
+
+                  <div className="flex gap-2 mt-2">
+                    <span className="shrink-0 text-yellow-400 font-bold font-mono text-[11px] bg-yellow-400/10 px-1.5 rounded h-5 flex items-center justify-center">2</span>
+                    <span>If the microphone is still blocked in your native browser tab, tap the <span className="font-semibold text-white">"aA" icon</span> or the <span className="font-semibold text-white">Shield/Lock 🔒</span> directly on your Safari Address Bar.</span>
+                  </div>
+                  <div className="flex gap-2">
+                    <span className="shrink-0 text-yellow-400 font-bold font-mono text-[11px] bg-yellow-400/10 px-1.5 rounded h-5 flex items-center justify-center">3</span>
+                    <span>Tap <span className="font-semibold text-white">"Website Settings"</span>, find <strong className="text-cyan-400 font-bold">Microphone</strong>, and switch setting to <span className="text-emerald-400 font-bold">"Allow"</span> instead of "Deny".</span>
+                  </div>
+                  <div className="flex gap-2">
+                    <span className="shrink-0 text-yellow-400 font-bold font-mono text-[11px] bg-yellow-400/10 px-1.5 rounded h-5 flex items-center justify-center">4</span>
+                    <span>Reload the tab, tap the OMNI robot head, and allow browser audio streams to translate your voice!</span>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {micTroubleshootTab === 'chrome' && (
+              <div className="space-y-2">
+                <div className="flex gap-2">
+                  <span className="shrink-0 text-yellow-400 font-bold font-mono">1.</span>
+                  <span>Tap the <span className="font-semibold text-white">Lock icon 🔒</span> or the <span className="font-semibold text-white">three dots menu</span> directly to the left of the URL inside Google Chrome's input deck.</span>
+                </div>
+                <div className="flex gap-2">
+                  <span className="shrink-0 text-yellow-400 font-bold font-mono">2.</span>
+                  <span>Select <span className="font-semibold text-white">"Permissions"</span> or <span className="font-semibold text-white">"Site Settings"</span> from the menu list.</span>
+                </div>
+                <div className="flex gap-2">
+                  <span className="shrink-0 text-yellow-400 font-bold font-mono">3.</span>
+                  <span>Locate <span className="font-semibold text-cyan-400">Microphone Access</span>, and toggle it to <span className="text-emerald-400 font-bold">Allowed</span>.</span>
+                </div>
+                <div className="flex gap-2">
+                  <span className="shrink-0 text-yellow-400 font-bold font-mono">4.</span>
+                  <span>Return, pull-down to refresh or tap <span className="text-cyan-400 font-semibold inline-flex items-center gap-0.5"><RefreshCw className="w-2.5 h-2.5 inline animate-spin" /> reload</span> to synch speech capture!</span>
+                </div>
+              </div>
+            )}
+          </div>
+          
+          <div className="mt-3 flex gap-2 justify-end">
+            <button
+              type="button"
+              onClick={() => {
+                setYouTranscript('');
+                startSpeechRecognition();
+              }}
+              className="px-3 py-1.5 bg-yellow-500/10 hover:bg-yellow-500/20 text-yellow-400 border border-yellow-500/30 rounded font-mono text-[9px] font-bold transition flex items-center gap-1 cursor-pointer select-none"
+            >
+              <RefreshCw className="w-3 h-3" />
+              <span>TEST AGAIN / RETRY MIC CONNECTION</span>
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* GEMINI QUOTA MET / API KEY CONFIGURATION TROUBLESHOOTING HUD */}
+      {(isSimulatedMode || omniResponseWords.includes("DAILY QUOTA EXCEEDED") || omniResponseWords.includes("CONFIGURATION BOUNDARY")) && (
+        <div className="w-full max-w-xl z-20 mt-3 bg-slate-950/95 border border-cyan-500/50 rounded-xl p-5 shadow-[0_0_25px_rgba(6,182,212,0.15)] backdrop-blur-md text-left transition-all duration-300">
+          <div className="flex items-center gap-2 text-cyan-400 font-mono text-xs font-bold uppercase tracking-wider mb-2.5 pb-1 border-b border-white/10">
+            <Sparkles className="w-4 h-4 text-cyan-400 shrink-0" />
+            <span>Interactive Guide: Resolve Gemini Quota Limit</span>
+          </div>
+
+          <p className="text-slate-300 font-sans text-xs leading-relaxed mb-4">
+            The app's default shared API key has reached its safety budget limit of <strong>20 requests per day</strong>. Since Gemini's API is <strong className="text-cyan-400">100% free</strong> with no custom subscriptions or credit cards required, you can bypass this limitation instantly by inserting your own free key!
+          </p>
+
+          <div className="space-y-3 font-sans text-xs text-slate-300 leading-relaxed bg-black/60 p-3.5 rounded-lg border border-white/5">
+            <div className="flex gap-2.5">
+              <span className="shrink-0 text-cyan-400 font-bold font-mono text-[10.5px] bg-cyan-500/10 h-5 w-5 rounded flex items-center justify-center">1</span>
+              <div className="flex-1">
+                <span className="text-slate-100 font-semibold">Generate a FREE API Key:</span>
+                <p className="text-[11px] text-slate-400 mt-0.5">Log in to Google AI Studio to grab your free personal key. No billing details requested.</p>
+                <div className="mt-2.5">
+                  <a
+                    href="https://aistudio.google.com/"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-cyan-500/10 hover:bg-cyan-500/25 text-cyan-400 hover:text-white border border-cyan-400/40 rounded font-mono text-[10px] font-bold transition duration-300 hover:scale-[1.02] cursor-pointer"
+                  >
+                    <span>🔑 GET KEY FROM GOOGLE AI STUDIO ↗</span>
+                  </a>
+                </div>
+              </div>
+            </div>
+
+            <div className="border-t border-white/5 pt-3 flex gap-2.5">
+              <span className="shrink-0 text-cyan-400 font-bold font-mono text-[10.5px] bg-cyan-500/10 h-5 w-5 rounded flex items-center justify-center">2</span>
+              <div className="flex-1">
+                <span className="text-slate-100 font-semibold">Insert Key into Secrets Panel:</span>
+                <p className="text-[11px] text-slate-400 mt-0.5">
+                  Click the <strong className="text-white">Settings Cog Gear (⚙️)</strong> icon located in the very top-right of your AI Studio workspace.
+                </p>
+              </div>
+            </div>
+
+            <div className="border-t border-white/5 pt-3 flex gap-2.5">
+              <span className="shrink-0 text-cyan-400 font-bold font-mono text-[10.5px] bg-cyan-500/10 h-5 w-5 rounded flex items-center justify-center">3</span>
+              <div className="flex-1">
+                <span className="text-slate-100 font-semibold">Save and Refresh:</span>
+                <p className="text-[11px] text-slate-400 mt-0.5">
+                  Paste your key into the <code className="bg-slate-800 text-cyan-300 px-1.5 py-0.5 rounded font-mono text-[10px]">GEMINI_API_KEY</code> field, save, and enjoy fully uninterrupted, latency-free OMNI cognitive threads!
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div className="mt-4 flex gap-2 justify-end">
+            <button
+              type="button"
+              onClick={() => {
+                setOmniResponseWords('');
+                setIsSimulatedMode(false);
+              }}
+              className="px-3.5 py-1.5 bg-white/5 hover:bg-white/10 text-slate-400 hover:text-white rounded font-mono text-[10px] font-bold transition cursor-pointer select-none"
+            >
+              DISMISS NOTICE
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* FUTURISTIC MAIN SCREEN KEYBOARD INPUT PORTAL */}
       <form 
         onSubmit={handleManualSendSubmit} 
@@ -1065,7 +1312,6 @@ export function AIWorkspaceChat({ memory, onAddMemory, onClearMemory }: AIWorksp
       >
         <div className="flex items-center gap-1.5 pl-2 select-none shrink-0">
           <Bot className="w-3.5 h-3.5 text-cyan-400" />
-          <span className="font-mono text-[9px] text-cyan-500 font-extrabold uppercase tracking-wider">COMMAND DIRECT &gt;</span>
         </div>
         <input
           type="text"
